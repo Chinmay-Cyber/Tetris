@@ -3,171 +3,182 @@
 #include <cstdlib>
 #include <ctime>
 
-// Constants
+
 const int screenWidth = 400;
 const int screenHeight = 800;
 const int gridWidth = 10;
 const int gridHeight = 20;
 const int blockSize = 40;
 
-// Tetromino shapes
+
 const int shapes[7][4][4] = {
-    {{1, 1, 1, 1}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // I
-    {{1, 1, 0, 0}, {0, 1, 1, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // Z
-    {{0, 1, 1, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // S
-    {{1, 1, 1, 0}, {0, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // T
-    {{1, 1, 0, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // O
-    {{1, 1, 1, 0}, {1, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}, // L
-    {{1, 1, 1, 0}, {0, 0, 1, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}  // J
+    {{1, 1, 1, 1}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{1, 1, 0, 0}, {0, 1, 1, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{0, 1, 1, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{1, 1, 1, 0}, {0, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{1, 1, 0, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{1, 1, 1, 0}, {1, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{1, 1, 1, 0}, {0, 0, 1, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}}
 };
 
-// Colors for each tetromino
 const Color tetrominoColors[7] = {
     SKYBLUE, RED, GREEN, PURPLE, YELLOW, ORANGE, BLUE
 };
 
-// Game state
-std::vector<std::vector<int>> grid(gridHeight, std::vector<int>(gridWidth, 0));
-std::vector<std::vector<Color>> gridColors(gridHeight, std::vector<Color>(gridWidth, BLANK));
-int currentTetromino[4][4];
-Color currentColor;
-int posX = 3, posY = 0;
-int score = 0;
-float timer = 0;
-float delay = 0.5f;
 
-// Helper functions
-bool CheckCollision(int offsetX, int offsetY) {
-    for (int y = 0; y < 4; y++) {
-        for (int x = 0; x < 4; x++) {
-            if (currentTetromino[y][x]) {
-                int newX = posX + x + offsetX;
-                int newY = posY + y + offsetY;
-                if (newX < 0 || newX >= gridWidth || newY >= gridHeight || (newY >= 0 && grid[newY][newX])) {
-                    return true;
+class Tetromino {
+public:
+    int shape[4][4];
+    Color color;
+    int posX, posY;
+
+    Tetromino() : posX(3), posY(0) {
+        Spawn();
+    }
+
+    void Spawn() {
+        int index = rand() % 7;
+        std::copy(&shapes[index][0][0], &shapes[index][0][0] + 16, &shape[0][0]);
+        color = tetrominoColors[index];
+        posX = 3;
+        posY = 0;
+    }
+
+    void Rotate() {
+        int rotated[4][4] = { 0 };
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                rotated[x][3 - y] = shape[y][x];
+            }
+        }
+        std::copy(&rotated[0][0], &rotated[0][0] + 16, &shape[0][0]);
+    }
+};
+
+
+class Grid {
+public:
+    std::vector<std::vector<int>> cells;
+    std::vector<std::vector<Color>> colors;
+
+    Grid() : cells(gridHeight, std::vector<int>(gridWidth, 0)),
+        colors(gridHeight, std::vector<Color>(gridWidth, BLANK)) {
+    }
+
+    bool CheckCollision(Tetromino& tetromino, int offsetX, int offsetY) {
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                if (tetromino.shape[y][x]) {
+                    int newX = tetromino.posX + x + offsetX;
+                    int newY = tetromino.posY + y + offsetY;
+                    if (newX < 0 || newX >= gridWidth || newY >= gridHeight || (newY >= 0 && cells[newY][newX])) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    void LockTetromino(Tetromino& tetromino) {
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                if (tetromino.shape[y][x]) {
+                    cells[tetromino.posY + y][tetromino.posX + x] = 1;
+                    colors[tetromino.posY + y][tetromino.posX + x] = tetromino.color;
                 }
             }
         }
     }
-    return false;
-}
 
-void LockTetromino() {
-    for (int y = 0; y < 4; y++) {
-        for (int x = 0; x < 4; x++) {
-            if (currentTetromino[y][x]) {
-                grid[posY + y][posX + x] = 1;
-                gridColors[posY + y][posX + x] = currentColor;
+    void ClearLines(int& score) {
+        for (int y = gridHeight - 1; y >= 0; y--) {
+            bool fullLine = true;
+            for (int x = 0; x < gridWidth; x++) {
+                if (!cells[y][x]) {
+                    fullLine = false;
+                    break;
+                }
+            }
+            if (fullLine) {
+                cells.erase(cells.begin() + y);
+                cells.insert(cells.begin(), std::vector<int>(gridWidth, 0));
+                colors.erase(colors.begin() + y);
+                colors.insert(colors.begin(), std::vector<Color>(gridWidth, BLANK));
+                score += 100;
+                y++;
             }
         }
     }
-}
 
-void ClearLines() {
-    for (int y = gridHeight - 1; y >= 0; y--) {
-        bool fullLine = true;
-        for (int x = 0; x < gridWidth; x++) {
-            if (!grid[y][x]) {
-                fullLine = false;
-                break;
-            }
-        }
-        if (fullLine) {
-            grid.erase(grid.begin() + y);
-            grid.insert(grid.begin(), std::vector<int>(gridWidth, 0));
-            gridColors.erase(gridColors.begin() + y);
-            gridColors.insert(gridColors.begin(), std::vector<Color>(gridWidth, BLANK));
-            score += 100;
-            y++; // Check the same line again
-        }
-    }
-}
-
-void RotateTetromino() {
-    int rotated[4][4] = { 0 };
-    for (int y = 0; y < 4; y++) {
-        for (int x = 0; x < 4; x++) {
-            rotated[x][3 - y] = currentTetromino[y][x];
-        }
-    }
-    std::copy(&rotated[0][0], &rotated[0][0] + 16, &currentTetromino[0][0]);
-    if (CheckCollision(0, 0)) {
-        std::copy(&rotated[0][0], &rotated[0][0] + 16, &currentTetromino[0][0]); // Undo rotation
-    }
-}
-
-void SpawnTetromino() {
-    int index = rand() % 7;
-    std::copy(&shapes[index][0][0], &shapes[index][0][0] + 16, &currentTetromino[0][0]);
-    currentColor = tetrominoColors[index];
-    posX = 3;
-    posY = 0;
-    if (CheckCollision(0, 0)) {
-        // Game over
-        grid.assign(gridHeight, std::vector<int>(gridWidth, 0));
-        gridColors.assign(gridHeight, std::vector<Color>(gridWidth, BLANK));
-        score = 0;
-    }
-}
-
-// Drawing functions
-void DrawGrid() {
-    for (int y = 0; y < gridHeight; y++) {
-        for (int x = 0; x < gridWidth; x++) {
-            if (grid[y][x]) {
-                DrawRectangle(x * blockSize, y * blockSize, blockSize - 2, blockSize - 2, gridColors[y][x]);
+    void Draw() {
+        for (int y = 0; y < gridHeight; y++) {
+            for (int x = 0; x < gridWidth; x++) {
+                if (cells[y][x]) {
+                    DrawRectangle(x * blockSize, y * blockSize, blockSize - 2, blockSize - 2, colors[y][x]);
+                }
             }
         }
     }
-}
+};
 
-void DrawTetromino() {
-    for (int y = 0; y < 4; y++) {
-        for (int x = 0; x < 4; x++) {
-            if (currentTetromino[y][x]) {
-                DrawRectangle((posX + x) * blockSize, (posY + y) * blockSize, blockSize - 2, blockSize - 2, currentColor);
-            }
-        }
-    }
-}
 
 int main() {
-    InitWindow(screenWidth, screenHeight, "Tetris - Colorful Blocks");
+    InitWindow(screenWidth, screenHeight, "Tetris - OOP Version");
     SetTargetFPS(60);
     srand(time(nullptr));
 
-    SpawnTetromino();
+    Grid grid;
+    Tetromino tetromino;
+    int score = 0;
+    float timer = 0;
+    float delay = 0.5f;
 
     while (!WindowShouldClose()) {
-        // Input handling
-        if (IsKeyPressed(KEY_LEFT) && !CheckCollision(-1, 0)) posX--;
-        if (IsKeyPressed(KEY_RIGHT) && !CheckCollision(1, 0)) posX++;
-        if (IsKeyPressed(KEY_DOWN) && !CheckCollision(0, 1)) posY++;
-        if (IsKeyPressed(KEY_UP)) RotateTetromino();
-
-        // Update
-        timer += GetFrameTime();
-        if (timer > delay) {
-            timer = 0;
-            if (!CheckCollision(0, 1)) {
-                posY++;
-            }
-            else {
-                LockTetromino();
-                ClearLines();
-                SpawnTetromino();
+        
+        if (IsKeyPressed(KEY_LEFT) && !grid.CheckCollision(tetromino, -1, 0)) tetromino.posX--;
+        if (IsKeyPressed(KEY_RIGHT) && !grid.CheckCollision(tetromino, 1, 0)) tetromino.posX++;
+        if (IsKeyPressed(KEY_DOWN) && !grid.CheckCollision(tetromino, 0, 1)) tetromino.posY++;
+        if (IsKeyPressed(KEY_UP)) {
+            tetromino.Rotate();
+            if (grid.CheckCollision(tetromino, 0, 0)) {
+                tetromino.Rotate();
+                tetromino.Rotate();
+                tetromino.Rotate(); 
             }
         }
 
-        // Draw
+        
+        timer += GetFrameTime();
+        if (timer > delay) {
+            timer = 0;
+            if (!grid.CheckCollision(tetromino, 0, 1)) {
+                tetromino.posY++;
+            }
+            else {
+                grid.LockTetromino(tetromino);
+                grid.ClearLines(score);
+                tetromino.Spawn();
+                if (grid.CheckCollision(tetromino, 0, 0)) {
+                   
+                    grid = Grid();
+                    score = 0;
+                }
+            }
+        }
+
+        
         BeginDrawing();
         ClearBackground(RAYWHITE);
-
-        DrawGrid();
-        DrawTetromino();
-
+        grid.Draw();
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                if (tetromino.shape[y][x]) {
+                    DrawRectangle((tetromino.posX + x) * blockSize, (tetromino.posY + y) * blockSize, blockSize - 2, blockSize - 2, tetromino.color);
+                }
+            }
+        }
         DrawText(TextFormat("Score: %d", score), 10, 10, 20, BLACK);
-
         EndDrawing();
     }
 
